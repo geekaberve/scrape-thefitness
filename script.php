@@ -135,8 +135,8 @@ $htmlOutput = "<!DOCTYPE html>
 </head>
 <body>
     {$headerContent}
+    {$schedulerContent}
     <div class=\"calendar_main\">
-        {$schedulerContent}
         {$overlayEventContent}
     </div>
     {$scriptsContent}
@@ -144,9 +144,9 @@ $htmlOutput = "<!DOCTYPE html>
 </html>";
 
 // Save to an HTML file
-// file_put_contents('scraped_page.html', $htmlOutput);
+file_put_contents('scraped_page.html', $htmlOutput);
 
-echo $htmlOutput;
+// echo $htmlOutput;
 
 // echo "Scraped page saved to scraped_page.html\n";
 
