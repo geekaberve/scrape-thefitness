@@ -4,8 +4,34 @@ require 'vendor/autoload.php';
 
 use GuzzleHttp\Client;
 
+$clubs = array("hala" => 1, "zavrtnica" => 1, "branimir" => 1, "greengold" => 1, "hob" => 1, "kaptol" => 1);
+
+$baseUrl = "https://hob.thefitness.hr";
+
+if (isset($_GET['club']) && isset($clubs[$_GET['club']])) {
+    $baseUrl = "https://".$_GET['club'].".thefitness.hr";
+} else {
+    header('Content-Type: text/html; charset=UTF-8');
+    echo "<!DOCTYPE html>
+    <html lang='en'>
+    <head>
+        <meta charset='UTF-8'>
+        <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+        <title>Scraped Page</title>
+    </head>
+    <body>
+    ";
+
+    foreach ($clubs as $club => $value) {
+        echo "<a href=\"?club=$club\">$club</a><br/>";
+    }
+
+    echo "</body>
+    </html>";
+    die();
+}
+
 // Base URL and endpoint
-$baseUrl = "https://hala.thefitness.hr";
 $endpoint = "/calendar";
 
 // Function to resolve relative URLs
@@ -33,7 +59,9 @@ $htmlContent = (string) $response->getBody();
 // Load the HTML content into DOMDocument
 $dom = new DOMDocument();
 libxml_use_internal_errors(true);
-$dom->loadHTML($htmlContent);
+$htmlContent = mb_convert_encoding($htmlContent, 'HTML-ENTITIES', 'UTF-8');
+$htmlContent = '<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">' . $htmlContent;
+$dom->loadHTML($htmlContent, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
 libxml_clear_errors();
 
 // Function to replace relative URLs in $.get calls
@@ -76,15 +104,30 @@ foreach ($scripts as $script) {
 
 $schedulerContent = "";
 $xpath = new DOMXPath($dom);
-$scrollingFrames = $xpath->query("//*[contains(@class, 'scrollingframe')]");
-foreach ($scrollingFrames as $scrollingFrame) {
-    // Process the content of .scrollingframe
-    $schedulerContent .= $dom->saveHTML($scrollingFrame);
+$schedulerNode = $xpath->query("//*[@id='scheduler']")->item(0);
+
+if ($schedulerNode) {
+    // Extract the HTML of #scheduler
+    $schedulerContent = $dom->saveHTML($schedulerNode);
+
+    // Replace relative links in scripts within #scheduler
+    $schedulerContent = preg_replace_callback(
+        '/\$.get\((["\'])(\/[^"\']+)\1/', // Matches $.get with a relative URL
+        function ($matches) use ($baseUrl) {
+            $relativePath = $matches[2];
+            $absoluteURL = $baseUrl . $relativePath;
+            return str_replace($matches[2], $absoluteURL, $matches[0]);
+        },
+        $schedulerContent
+    );
 }
 
+$schedulerContent = mb_convert_encoding($schedulerContent, 'HTML-ENTITIES', 'UTF-8');
 
 $scrollDom = new DOMDocument();
 libxml_use_internal_errors(true);
+
+// Load the HTML content into DOMDocument
 $scrollDom->loadHTML($schedulerContent, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
 libxml_clear_errors();
 
@@ -103,7 +146,6 @@ foreach ($eventDivs as $eventDiv) {
 
 // Save the modified HTML
 $schedulerContent = $scrollDom->saveHTML();
-
 // Extract #OverlayEvent content
 $overlayEvent = $dom->getElementById("OverlayEvent");
 $overlayEventContent = $overlayEvent ? $dom->saveHTML($overlayEvent) : "";
@@ -128,7 +170,7 @@ $htmlOutput = "<!DOCTYPE html>
     <base href=\"$baseUrl\">
     {$headContent}
     <style>
-        #calendar-register-for-error, #calendar_other_instructor, #calendar_other_class, .calendar-register-for-class {
+        #calendar-register-for-error, #calendar_other_instructor, #calendar_other_class, .calendar-register-for-class, .scrollindicator {
             display:none !important;
         }
     </style>
@@ -139,14 +181,14 @@ $htmlOutput = "<!DOCTYPE html>
     <div class=\"calendar_main\">
         {$overlayEventContent}
     </div>
-    {$scriptsContent}
 </body>
 </html>";
 
 // Save to an HTML file
-file_put_contents('scraped_page.html', $htmlOutput);
+// file_put_contents('scraped_page.html', $htmlOutput);
 
-// echo $htmlOutput;
+header('Content-Type: text/html; charset=UTF-8');
+echo $htmlOutput;
 
 // echo "Scraped page saved to scraped_page.html\n";
 
